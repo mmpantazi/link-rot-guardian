@@ -35,7 +35,7 @@ def build_parser():
         p.add_argument("--no-archive", action="store_true", help="do not query the Wayback Machine")
     c = sub.choices["check"]
     c.add_argument("--format", choices=["text", "json", "md"], default="text")
-    c.add_argument("--show-ok", action="store_true")
+    c.add_argument("--show-ok", action="store_true", help="also list healthy and temporarily redirected links")
     f = sub.choices["fix"]
     f.add_argument("--yes", action="store_true", help="apply every proposal without asking")
     f.add_argument("--dry-run", action="store_true", help="only print the diff")
@@ -79,6 +79,9 @@ def with_archive(args, web, results):
         return {}
     wb = wayback.Wayback(args.cache)
     found = {}
+    todo = sum(1 for l in web if results.get(l.url) and results[l.url].problem)
+    if todo:
+        log(f"looking up {todo} dead link(s) in the Wayback Machine (about 1-8 s each)...")
     for l in web:
         r = results.get(l.url)
         if r and r.problem:
@@ -124,7 +127,7 @@ def cmd_check(args):
 def print_text(rows, show_ok):
     by_file = defaultdict(list)
     for r in rows:
-        if show_ok or r["verdict"] != "ok":
+        if show_ok or r["verdict"] not in ("ok", "redirected"):
             by_file[r["file"]].append(r)
     for f, items in by_file.items():
         print(f)

@@ -79,7 +79,7 @@ def _homepage_drop(orig, final):
 
 
 class Checker:
-    def __init__(self, timeout=15, workers=16, per_host=2, retries=1, max_redirects=8,
+    def __init__(self, timeout=15, workers=16, per_host=4, retries=1, max_redirects=8,
                  verify_tls=True, soft=True):
         self.timeout, self.workers, self.retries = timeout, workers, retries
         self.max_redirects, self.soft = max_redirects, soft
