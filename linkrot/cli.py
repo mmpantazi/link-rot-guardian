@@ -5,6 +5,7 @@ import os
 import re
 import sys
 from collections import defaultdict
+from urllib.parse import urldefrag
 
 from . import __version__, extract, patch, wayback
 from .check import Checker
@@ -26,6 +27,8 @@ def build_parser():
         p.add_argument("--urls", metavar="FILE", help="text file with one URL per line (report only)")
         p.add_argument("--root", default=".", help="site root for /absolute local links (default: .)")
         p.add_argument("--ignore", action="append", default=[], metavar="REGEX", help="skip URLs matching REGEX (repeatable)")
+        p.add_argument("--ignore-file", metavar="FILE", default=".linkrotignore",
+                       help="file with one ignore REGEX per line (default: .linkrotignore if present)")
         p.add_argument("--timeout", type=float, default=15)
         p.add_argument("--workers", type=int, default=16)
         p.add_argument("--no-soft", action="store_true", help="do not look for soft-404/parked pages")
@@ -53,7 +56,7 @@ def collect(args):
         links.extend(extract.extract_file(path))
     if args.urls:
         links.extend(extract.read_url_list(args.urls))
-    ignore = [re.compile(r) for r in (DEFAULT_IGNORE[1:3] if args.allow_private else DEFAULT_IGNORE) + args.ignore]
+    ignore = [re.compile(r) for r in (DEFAULT_IGNORE[1:3] if args.allow_private else DEFAULT_IGNORE) + args.ignore + read_ignore_file(args.ignore_file)]
     web = [l for l in links if l.kind == "web" and not any(r.search(l.url) for r in ignore)]
     local = [] if args.no_local else [l for l in links if l.kind == "local" and l.file != args.urls
                                       and not extract.local_exists(l, args.root)]
@@ -156,6 +159,18 @@ def print_md(rows):
         print(f"| {r['file']} | {r['line']} | {r['url']} | {r['verdict']}: {r['detail']} | {fix} |")
 
 
+def keep_fragment(old, new):
+    frag = urldefrag(old)[1]
+    return new if not frag or "#" in new else f"{new}#{frag}"
+
+
+def read_ignore_file(path):
+    if not path or not os.path.isfile(path):
+        return []
+    with open(path, encoding="utf-8") as fh:
+        return [ln.strip() for ln in fh if ln.strip() and not ln.lstrip().startswith("#")]
+
+
 def make_proposals(args, web, results, snaps):
     props = []
     for l in web:
@@ -163,7 +178,7 @@ def make_proposals(args, web, results, snaps):
         if not r or not l.end:
             continue
         if r.verdict == "moved" and not args.no_moved:
-            props.append(patch.Proposal(l, r.final_url, r.detail, "moved"))
+            props.append(patch.Proposal(l, keep_fragment(l.url, r.final_url), r.detail, "moved"))
         elif r.problem:
             s = snaps.get((l.file, l.start, l.url))
             if s:

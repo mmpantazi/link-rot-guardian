@@ -1,6 +1,7 @@
 """Find Wayback Machine snapshots, preferring the one closest to a date."""
 import json
 import os
+from datetime import datetime
 import time
 import urllib.error
 import urllib.parse
@@ -79,19 +80,16 @@ class Wayback:
     _failed = False
 
     def _cdx(self, url, hint):
-        q = {"url": url, "output": "json", "filter": "statuscode:200", "limit": "1",
-             "fastLatest": "true"}
+        q = {"url": url, "output": "json", "filter": "statuscode:200", "limit": "-1"}
         if hint:
-            q.update(sort="closest", closest=hint)
-            q.pop("fastLatest")
-        else:
-            q["limit"] = "-1"
+            q.update(sort="closest", closest=hint, limit="6")
         self._throttle()
         rows = _get_json(f"{CDX}?{urllib.parse.urlencode(q)}")
         self._failed = rows is None
         if not rows or len(rows) < 2:
             return None
-        return Snapshot(url, rows[-1][1] if not hint else rows[1][1])
+        stamps = [r[1] for r in rows[1:]]
+        return Snapshot(url, min(stamps, key=lambda t: _distance(t, hint)) if hint else stamps[-1])
 
     def _available(self, url, hint):
         q = {"url": url}
@@ -111,6 +109,13 @@ class Wayback:
         os.makedirs(os.path.dirname(self.cache_path) or ".", exist_ok=True)
         with open(self.cache_path, "w") as fh:
             json.dump(self.cache, fh)
+
+
+def _distance(stamp, hint):
+    """Seconds between a 14-digit snapshot stamp and a YYYYMMDD(HHMMSS) hint."""
+    def parse(t):
+        return datetime.strptime((t + "000000")[:14], "%Y%m%d%H%M%S")
+    return abs((parse(stamp) - parse(hint)).total_seconds())
 
 
 def replay_url(snap):

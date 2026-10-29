@@ -64,7 +64,7 @@ def _soft(body, headers, url):
     text = body.decode("utf-8", errors="ignore")
     m = TITLE.search(text)
     title = re.sub(r"\s+", " ", m.group(1)).strip() if m else ""
-    if title and SOFT_TITLE.search(title):
+    if title and len(title) <= 60 and SOFT_TITLE.search(title):
         return f"page title says '{title[:60]}'"
     visible = re.sub(r"<(script|style)\b.*?</\1>", " ", text, flags=re.S | re.I)
     visible = re.sub(r"<[^>]+>", " ", visible)

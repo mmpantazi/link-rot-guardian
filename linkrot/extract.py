@@ -2,6 +2,7 @@
 import html
 import os
 import re
+from urllib.parse import unquote
 from dataclasses import dataclass
 
 MD_EXT = {".md", ".markdown", ".mdx", ".txt"}
@@ -38,7 +39,7 @@ class Link:
         return "local"
 
 
-def _mask(text, pattern, keep_group=None):
+def _mask(text, pattern):
     return pattern.sub(lambda m: re.sub(r"[^\n]", " ", m.group(0)), text)
 
 
@@ -113,7 +114,6 @@ def local_exists(link, root):
     if not target:
         return True
     target = html.unescape(target) if link.in_html_attr else target
-    from urllib.parse import unquote
     target = unquote(target)
     base = os.path.abspath(root) if target.startswith("/") else os.path.dirname(os.path.abspath(link.file))
     full = os.path.normpath(os.path.join(base, target.lstrip("/")))
