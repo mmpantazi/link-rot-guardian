@@ -1,0 +1,17 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "link-rot-guardian"
+version = "0.1.0"
+description = "Find dead and moved links in Markdown/HTML folders, suggest Wayback Machine replacements and patch files after approval."
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+
+[project.scripts]
+linkrot = "linkrot.cli:main"
+
+[tool.setuptools]
+packages = ["linkrot"]
