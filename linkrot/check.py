@@ -42,7 +42,24 @@ class _NoRedirect(urllib.request.HTTPRedirectHandler):
         return None
 
 
+def quote_url(url):
+    """Percent-encode non-ASCII and unsafe characters so urllib accepts the URL."""
+    parts = urllib.parse.urlsplit(url)
+    host = parts.hostname or ""
+    try:
+        host = host.encode("idna").decode("ascii")
+    except UnicodeError:
+        pass
+    netloc = host + (f":{parts.port}" if parts.port else "")
+    if parts.username:
+        netloc = urllib.parse.quote(parts.username) + "@" + netloc
+    safe = "%/:@!$&'()*+,;=~-._"
+    return urllib.parse.urlunsplit((parts.scheme, netloc, urllib.parse.quote(parts.path, safe=safe),
+                                    urllib.parse.quote(parts.query, safe=safe + "?"), ""))
+
+
 def _open(url, timeout, ctx):
+    url = quote_url(url)
     opener = urllib.request.build_opener(_NoRedirect, urllib.request.HTTPSHandler(context=ctx))
     req = urllib.request.Request(url, headers={"User-Agent": UA, "Accept": "text/html,*/*;q=0.8",
                                                "Accept-Language": "en"})

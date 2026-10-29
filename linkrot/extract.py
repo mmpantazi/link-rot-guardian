@@ -34,7 +34,7 @@ class Link:
         low = self.url.lower()
         if low.startswith(("http://", "https://")):
             return "web"
-        if self.url.startswith("//") or re.match(r"^[a-z][a-z0-9+.-]*:", low) or self.url.startswith("#"):
+        if self.url.startswith("//") or re.match(r"^[a-z][a-z0-9+.-]*:", low) or self.url == "#":
             return "skip"
         return "local"
 
@@ -93,7 +93,7 @@ def iter_files(paths):
 
 def extract_file(path):
     ext = os.path.splitext(path)[1].lower()
-    with open(path, encoding="utf-8", errors="replace", newline="") as fh:
+    with open(path, encoding="utf-8", errors="surrogateescape", newline="") as fh:
         text = fh.read()
     return extract_text(text, path, is_html=ext in HTML_EXT)
 
@@ -108,17 +108,58 @@ def read_url_list(path):
     return links
 
 
-def local_exists(link, root):
-    """Does a relative/site-root link point at an existing file or folder?"""
-    target = re.split(r"[?#]", link.url, 1)[0]
+def slug(heading):
+    """GitHub-style heading anchor."""
+    h = re.sub(r"<[^>]+>|[`*_~]|!?\[([^\]]*)\]\([^)]*\)", lambda m: m.group(1) or "", heading).strip().lower()
+    h = re.sub(r"[^\w\- ]", "", h, flags=re.U)
+    return h.replace(" ", "-")
+
+
+def anchors(path):
+    """Set of anchor names defined in a Markdown/HTML file."""
+    try:
+        with open(path, encoding="utf-8", errors="replace") as fh:
+            text = fh.read()
+    except OSError:
+        return set()
+    found = set(re.findall(r"""\b(?:id|name)\s*=\s*["']([^"']+)["']""", text))
+    if os.path.splitext(path)[1].lower() in MD_EXT:
+        seen = {}
+        for m in re.finditer(r"^ {0,3}#{1,6}[ \t]+(.*?)[ \t#]*$", _mask(text, FENCE), re.M):
+            base = slug(m.group(1))
+            n = seen.get(base, 0)
+            seen[base] = n + 1
+            found.add(base if n == 0 else f"{base}-{n}")
+    return found
+
+
+def resolve(link, root):
+    """Path of the local file a link points to, or None if it does not exist."""
+    target = unquote(re.split(r"[?#]", link.url, 1)[0])
     if not target:
-        return True
-    target = html.unescape(target) if link.in_html_attr else target
-    target = unquote(target)
+        return link.file
     base = os.path.abspath(root) if target.startswith("/") else os.path.dirname(os.path.abspath(link.file))
     full = os.path.normpath(os.path.join(base, target.lstrip("/")))
     if os.path.isfile(full):
-        return True
+        return full
     if os.path.isdir(full):
-        return True
-    return any(os.path.isfile(full + e) for e in (".md", ".html", ".htm", ".markdown"))
+        for idx in ("index.html", "index.md", "README.md", "_index.md"):
+            if os.path.isfile(os.path.join(full, idx)):
+                return os.path.join(full, idx)
+        return full
+    for e in (".md", ".html", ".htm", ".markdown"):
+        if os.path.isfile(full + e):
+            return full + e
+    return None
+
+
+def local_problem(link, root):
+    """Why a local link is broken ('' if fine)."""
+    target = resolve(link, root)
+    if target is None:
+        return "local file not found"
+    frag = unquote(link.url.split("#", 1)[1]) if "#" in link.url else ""
+    if frag and os.path.isfile(target) and os.path.splitext(target)[1].lower() in MD_EXT | HTML_EXT:
+        if frag.lower() not in {a.lower() for a in anchors(target)} and not re.match(r"^L\d+", frag):
+            return f"anchor #{frag} not found in {os.path.relpath(target)}"
+    return ""

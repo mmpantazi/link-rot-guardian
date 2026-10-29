@@ -21,14 +21,20 @@ def apply(text, proposals):
     return text
 
 
+def is_current(text, link):
+    """True if the file still has the URL at the span recorded when it was scanned."""
+    raw = text[link.start:link.end]
+    return (html.unescape(raw) if link.in_html_attr else raw) == link.url
+
+
 def read(path):
-    with open(path, encoding="utf-8", errors="replace", newline="") as fh:
+    with open(path, encoding="utf-8", errors="surrogateescape", newline="") as fh:
         return fh.read()
 
 
 def write(path, text):
     tmp = path + ".linkrot-tmp"
-    with open(tmp, "w", encoding="utf-8", newline="") as fh:
+    with open(tmp, "w", encoding="utf-8", errors="surrogateescape", newline="") as fh:
         fh.write(text)
     os.replace(tmp, path)
 

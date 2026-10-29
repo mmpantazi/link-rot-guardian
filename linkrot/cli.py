@@ -3,6 +3,7 @@ import argparse
 import json
 import os
 import re
+import subprocess
 import sys
 from collections import defaultdict
 from urllib.parse import urldefrag
@@ -25,6 +26,7 @@ def build_parser():
         p = sub.add_parser(name, help=hlp)
         p.add_argument("paths", nargs="*", help="Markdown/HTML files or folders")
         p.add_argument("--urls", metavar="FILE", help="text file with one URL per line (report only)")
+        p.add_argument("--since", metavar="GIT_REF", help="only scan files changed since GIT_REF (e.g. origin/main)")
         p.add_argument("--root", default=".", help="site root for /absolute local links (default: .)")
         p.add_argument("--ignore", action="append", default=[], metavar="REGEX", help="skip URLs matching REGEX (repeatable)")
         p.add_argument("--ignore-file", metavar="FILE", default=".linkrotignore",
@@ -38,6 +40,8 @@ def build_parser():
         p.add_argument("--no-archive", action="store_true", help="do not query the Wayback Machine")
     c = sub.choices["check"]
     c.add_argument("--format", choices=["text", "json", "md"], default="text")
+    c.add_argument("--fail-on", choices=["dead", "moved", "never"], default="dead",
+                   help="what makes the exit code 1 (default: dead; moved also counts permanent redirects)")
     c.add_argument("--show-ok", action="store_true", help="also list healthy and temporarily redirected links")
     f = sub.choices["fix"]
     f.add_argument("--yes", action="store_true", help="apply every proposal without asking")
@@ -50,16 +54,34 @@ def log(msg):
     print(msg, file=sys.stderr)
 
 
+def changed_since(ref):
+    out = subprocess.run(["git", "-c", "safe.directory=*", "diff", "--name-only", "--diff-filter=d", ref, "--"],
+                         capture_output=True, text=True)
+    if out.returncode:
+        raise SystemExit(f"git diff {ref} failed: {out.stderr.strip()}")
+    top = subprocess.run(["git", "-c", "safe.directory=*", "rev-parse", "--show-toplevel"],
+                         capture_output=True, text=True).stdout.strip()
+    return {os.path.realpath(os.path.join(top, n)) for n in out.stdout.split("\n") if n}
+
+
 def collect(args):
     links = []
+    only = changed_since(args.since) if args.since else None
     for path in extract.iter_files(args.paths):
+        if only is not None and os.path.realpath(path) not in only:
+            continue
         links.extend(extract.extract_file(path))
     if args.urls:
         links.extend(extract.read_url_list(args.urls))
     ignore = [re.compile(r) for r in (DEFAULT_IGNORE[1:3] if args.allow_private else DEFAULT_IGNORE) + args.ignore + read_ignore_file(args.ignore_file)]
     web = [l for l in links if l.kind == "web" and not any(r.search(l.url) for r in ignore)]
-    local = [] if args.no_local else [l for l in links if l.kind == "local" and l.file != args.urls
-                                      and not extract.local_exists(l, args.root)]
+    local = []
+    if not args.no_local:
+        for l in links:
+            if l.kind == "local" and l.file != args.urls:
+                why = extract.local_problem(l, args.root)
+                if why:
+                    local.append((l, why))
     return links, web, local
 
 
@@ -114,10 +136,11 @@ def cmd_check(args):
         rows.append({"file": l.file, "line": l.line, "url": l.url, "verdict": r.verdict, "status": r.status,
                      "detail": r.detail, "final_url": r.final_url if r.verdict in ("moved", "redirected") else "",
                      "archive": wayback.replay_url(s) if s else "", "archive_date": s.date if s else ""})
-    for l in local:
+    for l, why in local:
         rows.append({"file": l.file, "line": l.line, "url": l.url, "verdict": "dead", "status": 0,
-                     "detail": "local file not found", "final_url": "", "archive": "", "archive_date": ""})
-    bad = [r for r in rows if r["verdict"] in ("dead", "soft404")]
+                     "detail": why, "final_url": "", "archive": "", "archive_date": ""})
+    failing = {"dead": ("dead", "soft404"), "moved": ("dead", "soft404", "moved"), "never": ()}[args.fail_on]
+    bad = [r for r in rows if r["verdict"] in failing]
     if args.format == "json":
         print(json.dumps(rows, indent=2))
     elif args.format == "md":
@@ -142,7 +165,7 @@ def print_text(rows, show_ok):
                 print(f"          -> {r['final_url']}")
             if r["archive"]:
                 print(f"          archive ({r['archive_date']}): {r['archive']}")
-            elif r["verdict"] in ("dead", "soft404") and r["detail"] != "local file not found":
+            elif r["verdict"] in ("dead", "soft404") and r["url"].startswith("http"):
                 print("          no archived copy found")
     counts = defaultdict(int)
     for r in rows:
@@ -216,6 +239,10 @@ def cmd_fix(args):
     for path, items in by_file.items():
         text = patch.read(path)
         lines = text.splitlines()
+        stale = [p for p in items if not patch.is_current(text, p.link)]
+        if stale:
+            log(f"{path} changed since it was scanned; skipping {len(stale)} proposal(s), rerun to retry")
+            items = [p for p in items if p not in stale]
         chosen, all_ = [], args.yes
         for p in sorted(items, key=lambda p: p.link.start):
             if interactive and not all_:

@@ -35,7 +35,7 @@ class ExtractTests(unittest.TestCase):
 
     def test_kinds(self):
         ls = extract_text("[a](mailto:x@y.z) [b](#top) [c](docs/a.md) [d](//cdn.io/x.js)", "f.md")
-        self.assertEqual([l.kind for l in ls], ["skip", "skip", "local", "skip"])
+        self.assertEqual([l.kind for l in ls], ["skip", "local", "local", "skip"])
 
 
 if __name__ == "__main__":
