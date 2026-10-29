@@ -33,7 +33,7 @@ Verdicts: `DEAD` (404/410, DNS gone, refused, missing local file or `#anchor`), 
 
 Only the exact URL span is replaced (labels, titles and surrounding text are untouched); links in code blocks are ignored; `&` is escaped in HTML attributes.
 
-Useful options: `--ignore REGEX` (repeatable) or a `.linkrotignore` file (one regex per line, `#` comments), `--root DIR` for `/absolute` local links, `--no-archive`, `--no-moved`, `--no-local`, `--no-soft`, `--workers N`, `--timeout S`, `--allow-private` (check localhost/LAN URLs; skipped by default along with example.com). Wayback answers are cached in `~/.cache/linkrot/wayback.json` (`--cache`, `LINKROT_CACHE`).
+Useful options: `--no-anchors` (frameworks that generate ids, like Hugo definition lists, look like missing anchors), `--ignore REGEX` (repeatable) or a `.linkrotignore` file (one regex per line, `#` comments), `--root DIR` for `/absolute` local links, `--no-archive`, `--no-moved`, `--no-local`, `--no-soft`, `--workers N`, `--timeout S`, `--allow-private` (check localhost/LAN URLs; skipped by default along with example.com). Wayback answers are cached in `~/.cache/linkrot/wayback.json` (`--cache`, `LINKROT_CACHE`).
 
 Local links: relative and `/root` links must point at an existing file or folder (folders resolve to `index.html`/`README.md`), and `#anchors` are checked against GitHub-style heading slugs and `id=`/`name=` attributes.
 

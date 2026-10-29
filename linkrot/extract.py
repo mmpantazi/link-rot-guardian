@@ -115,7 +115,7 @@ def slug(heading):
     return h.replace(" ", "-")
 
 
-def anchors(path):
+def find_anchors(path):
     """Set of anchor names defined in a Markdown/HTML file."""
     try:
         with open(path, encoding="utf-8", errors="replace") as fh:
@@ -153,13 +153,13 @@ def resolve(link, root):
     return None
 
 
-def local_problem(link, root):
+def local_problem(link, root, anchors=True):
     """Why a local link is broken ('' if fine)."""
     target = resolve(link, root)
     if target is None:
         return "local file not found"
     frag = unquote(link.url.split("#", 1)[1]) if "#" in link.url else ""
-    if frag and os.path.isfile(target) and os.path.splitext(target)[1].lower() in MD_EXT | HTML_EXT:
-        if frag.lower() not in {a.lower() for a in anchors(target)} and not re.match(r"^L\d+", frag):
+    if anchors and frag and os.path.isfile(target) and os.path.splitext(target)[1].lower() in MD_EXT | HTML_EXT:
+        if frag.lower() not in {a.lower() for a in find_anchors(target)} and not re.match(r"^L\d+", frag):
             return f"anchor #{frag} not found in {os.path.relpath(target)}"
     return ""

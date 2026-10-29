@@ -14,6 +14,7 @@ from .check import Checker
 DEFAULT_IGNORE = [r"^https?://(localhost|127\.|0\.0\.0\.0|\[::1\]|10\.|192\.168\.)",
                   r"^https?://([^/]*\.)?example\.(com|org|net)(/|$)", r"^https?://[^/]*\.(invalid|test|local)(/|$)",
                   r"^https?://[^/]*\{", r"^https?://[^/]*\$"]
+TEMPLATE = re.compile(r"\{\{|\{%|\$\{|<%|\{#")
 ICON = {"ok": "ok  ", "moved": "MOVE", "redirected": "redir", "dead": "DEAD", "soft404": "SOFT",
         "blocked": "????", "error": "ERR "}
 
@@ -34,6 +35,8 @@ def build_parser():
         p.add_argument("--timeout", type=float, default=15)
         p.add_argument("--workers", type=int, default=16)
         p.add_argument("--no-soft", action="store_true", help="do not look for soft-404/parked pages")
+        p.add_argument("--no-anchors", action="store_true",
+                       help="do not verify #anchors (generated ids, e.g. Hugo definition lists, look missing)")
         p.add_argument("--no-local", action="store_true", help="do not check relative file links")
         p.add_argument("--cache", default=os.environ.get("LINKROT_CACHE", os.path.expanduser("~/.cache/linkrot/wayback.json")))
         p.add_argument("--allow-private", action="store_true", help="also check localhost/private-network URLs")
@@ -78,8 +81,9 @@ def collect(args):
     local = []
     if not args.no_local:
         for l in links:
-            if l.kind == "local" and l.file != args.urls:
-                why = extract.local_problem(l, args.root)
+            if l.kind == "local" and l.file != args.urls and not any(r.search(l.url) for r in ignore) \
+                    and not TEMPLATE.search(l.url):
+                why = extract.local_problem(l, args.root, anchors=not args.no_anchors)
                 if why:
                     local.append((l, why))
     return links, web, local

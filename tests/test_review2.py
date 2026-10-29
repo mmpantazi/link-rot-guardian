@@ -42,6 +42,16 @@ class AnchorTests(Base):
             self.assertNotIn("  " + ok, out)
         self.assertEqual(out.count("DEAD"), 2)
 
+    def test_templates_ignore_and_no_anchors(self):
+        self.w("b.md", "# T\n")
+        self.w("a.md", "[t]({{ page.url }}) [g](g) [x](b.md#generated) [y](b.md#other)")
+        rc, out = self.run_cli("check", self.d.name, "--no-archive", "--ignore", r"^g$", "--ignore", "#other")
+        self.assertIn("#generated", out)
+        self.assertNotIn("page.url", out)
+        self.assertNotIn("  g\n", out)
+        rc, out = self.run_cli("check", self.d.name, "--no-archive", "--ignore", r"^g$", "--no-anchors")
+        self.assertEqual(rc, 0)
+
     def test_slug(self):
         self.assertEqual(extract.slug("What's `new` in [v2](http://x)?"), "whats-new-in-v2")
 
